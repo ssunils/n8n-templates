@@ -1,0 +1,267 @@
+{
+  "name": "LinkedIn Jobs Automation Configuration",
+  "version": "1.0.0",
+  "description": "Configuration file for LinkedIn Jobs Automation n8n templates",
+  "templates": [
+    {
+      "name": "LinkedIn Job Search & Alert",
+      "file": "linkedin-job-search-alert.json",
+      "description": "Main workflow for automated job discovery and notifications",
+      "required": true,
+      "dependencies": ["job-storage-webhook"]
+    },
+    {
+      "name": "Job Storage Webhook",
+      "file": "job-storage-webhook.json",
+      "description": "Webhook endpoint for storing job data in database",
+      "required": true,
+      "dependencies": []
+    },
+    {
+      "name": "Job Application Tracker",
+      "file": "job-application-tracker.json",
+      "description": "Track job application status and notifications",
+      "required": false,
+      "dependencies": []
+    },
+    {
+      "name": "Daily Analytics Report",
+      "file": "daily-analytics-report.json",
+      "description": "Daily analytics and performance reporting",
+      "required": false,
+      "dependencies": []
+    }
+  ],
+  "credentials": {
+    "required": [
+      {
+        "name": "postgres",
+        "type": "PostgreSQL Database",
+        "description": "Database connection for job data storage",
+        "fields": {
+          "host": "Your PostgreSQL host",
+          "database": "linkedin_jobs_db",
+          "user": "Your database username",
+          "password": "Your database password",
+          "port": 5432,
+          "ssl": false
+        }
+      }
+    ],
+    "optional": [
+      {
+        "name": "slack",
+        "type": "Slack OAuth2",
+        "description": "Slack integration for notifications",
+        "fields": {
+          "clientId": "Your Slack App Client ID",
+          "clientSecret": "Your Slack App Client Secret",
+          "accessToken": "Bot User OAuth Token"
+        },
+        "permissions": ["chat:write", "channels:read"]
+      },
+      {
+        "name": "email",
+        "type": "SMTP Email",
+        "description": "Email service for notifications",
+        "fields": {
+          "user": "your-email@example.com",
+          "password": "Your email password or app password",
+          "host": "smtp.gmail.com",
+          "port": 587,
+          "secure": false,
+          "allowUnauthorizedCerts": false
+        }
+      },
+      {
+        "name": "google-calendar",
+        "type": "Google Calendar OAuth2",
+        "description": "Google Calendar for interview scheduling",
+        "fields": {
+          "clientId": "Your Google OAuth Client ID",
+          "clientSecret": "Your Google OAuth Client Secret"
+        },
+        "scopes": ["https://www.googleapis.com/auth/calendar"]
+      }
+    ]
+  },
+  "configuration": {
+    "job_search": {
+      "keywords": "Software Engineer",
+      "location": "San Francisco, CA",
+      "experience_level": "Mid-Senior level",
+      "job_type": "Full-time",
+      "remote": true,
+      "search_interval_hours": 4
+    },
+    "notifications": {
+      "slack": {
+        "enabled": true,
+        "channels": {
+          "job_alerts": "job-alerts",
+          "applications": "job-applications", 
+          "analytics": "job-analytics"
+        }
+      },
+      "email": {
+        "enabled": true,
+        "recipients": ["your-email@example.com"],
+        "sender": "job-alerts@example.com"
+      }
+    },
+    "analytics": {
+      "enabled": true,
+      "daily_report_time": "09:00",
+      "timezone": "America/Los_Angeles"
+    },
+    "database": {
+      "retention_days": 365,
+      "auto_cleanup": true
+    }
+  },
+  "webhooks": {
+    "job_storage": {
+      "path": "/webhook/job-storage",
+      "method": "POST",
+      "authentication": "headerAuth",
+      "description": "Endpoint for storing scraped job data"
+    },
+    "application_update": {
+      "path": "/webhook/job-application-update", 
+      "method": "POST",
+      "authentication": "headerAuth",
+      "description": "Endpoint for updating job application status"
+    }
+  },
+  "installation_steps": [
+    {
+      "step": 1,
+      "title": "Database Setup",
+      "description": "Create PostgreSQL database and run schema",
+      "commands": [
+        "createdb linkedin_jobs_db",
+        "psql -d linkedin_jobs_db -f database-schema.sql"
+      ]
+    },
+    {
+      "step": 2,
+      "title": "Import Workflows",
+      "description": "Import all JSON workflow files into n8n",
+      "files": [
+        "job-storage-webhook.json",
+        "linkedin-job-search-alert.json", 
+        "job-application-tracker.json",
+        "daily-analytics-report.json"
+      ]
+    },
+    {
+      "step": 3,
+      "title": "Configure Credentials",
+      "description": "Set up database and service credentials in n8n",
+      "credentials": ["postgres", "slack", "email", "google-calendar"]
+    },
+    {
+      "step": 4,
+      "title": "Update Configuration",
+      "description": "Customize job search parameters and notification settings",
+      "nodes": [
+        "Set Job Search Parameters",
+        "Slack notification channels",
+        "Email recipients"
+      ]
+    },
+    {
+      "step": 5,
+      "title": "Test Workflows",
+      "description": "Test each workflow individually before activation",
+      "workflows": [
+        "job-storage-webhook",
+        "linkedin-job-search-alert",
+        "daily-analytics-report"
+      ]
+    },
+    {
+      "step": 6,
+      "title": "Activate Workflows",
+      "description": "Activate workflows in the correct order",
+      "order": [
+        "job-storage-webhook",
+        "linkedin-job-search-alert",
+        "daily-analytics-report",
+        "job-application-tracker"
+      ]
+    }
+  ],
+  "troubleshooting": {
+    "common_issues": [
+      {
+        "issue": "LinkedIn scraping returns no results",
+        "solution": "Check if LinkedIn changed their HTML structure. Update CSS selectors in the Parse Job Results node.",
+        "affected_workflow": "linkedin-job-search-alert"
+      },
+      {
+        "issue": "Database connection failed",
+        "solution": "Verify PostgreSQL credentials and server accessibility. Check if database exists.",
+        "affected_workflow": "all"
+      },
+      {
+        "issue": "Slack notifications not sent",
+        "solution": "Verify Slack bot permissions and channel access. Check OAuth token validity.",
+        "affected_workflow": "all with slack notifications"
+      },
+      {
+        "issue": "Email notifications not sent", 
+        "solution": "Check SMTP settings and authentication. Verify sender/recipient addresses.",
+        "affected_workflow": "all with email notifications"
+      },
+      {
+        "issue": "Webhooks return 404 errors",
+        "solution": "Ensure webhook workflows are active and paths are correct. Check authentication.",
+        "affected_workflow": "webhook endpoints"
+      }
+    ]
+  },
+  "customization": {
+    "search_parameters": {
+      "description": "Modify job search criteria",
+      "location": "linkedin-job-search-alert.json -> Set Job Search Parameters node",
+      "parameters": {
+        "keywords": "Job title or skills to search for",
+        "location": "Geographic location or 'Remote'",
+        "experience_level": "Entry level, Mid-Senior level, Director, Executive",
+        "job_type": "Full-time, Part-time, Contract, Temporary, Internship",
+        "remote": "true for remote-friendly jobs, false for on-site only"
+      }
+    },
+    "notification_settings": {
+      "description": "Customize notification preferences",
+      "slack_channels": "Update channel IDs in Slack nodes",
+      "email_recipients": "Modify recipient lists in email nodes",
+      "message_templates": "Customize notification message content"
+    },
+    "scheduling": {
+      "description": "Adjust automation timing",
+      "job_search_frequency": "Modify interval in Schedule Trigger node",
+      "analytics_report_time": "Update cron expression in Daily Analytics workflow"
+    }
+  },
+  "maintenance": {
+    "weekly": [
+      "Review job search effectiveness",
+      "Update search keywords if needed",
+      "Check for duplicate jobs in database"
+    ],
+    "monthly": [
+      "Analyze application success rates",
+      "Optimize search parameters based on results",
+      "Review and update notification preferences",
+      "Clean up old job data (optional)"
+    ],
+    "as_needed": [
+      "Update LinkedIn parsing logic if site structure changes",
+      "Refresh authentication tokens",
+      "Backup database",
+      "Update n8n workflows if new features are needed"
+    ]
+  }
+}

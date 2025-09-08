@@ -1,0 +1,201 @@
+{
+  "name": "LinkedIn Jobs - Database Storage Webhook",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "job-storage",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-receiver",
+      "name": "Webhook - Job Storage",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        300
+      ],
+      "webhookId": "job-storage-webhook"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "validate-job-data",
+              "leftValue": "={{ $json.title }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            },
+            {
+              "id": "validate-company",
+              "leftValue": "={{ $json.company }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "validate-job-data",
+      "name": "Validate Job Data",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Check if job already exists in database\nconst jobData = $input.first().json;\n\n// Create unique job identifier\nconst jobHash = require('crypto')\n  .createHash('md5')\n  .update(`${jobData.title}-${jobData.company}-${jobData.location}`)\n  .digest('hex');\n\n// Add metadata\nconst enrichedJob = {\n  ...jobData,\n  job_hash: jobHash,\n  created_at: new Date().toISOString(),\n  updated_at: new Date().toISOString(),\n  status: 'active',\n  is_applied: false,\n  is_saved: false,\n  priority: 'medium',\n  notes: ''\n};\n\nreturn [{ json: enrichedJob }];"
+      },
+      "id": "enrich-job-data",
+      "name": "Enrich Job Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO linkedin_jobs (\\n  id,\\n  title,\\n  company,\\n  location,\\n  summary,\\n  link,\\n  posted_date,\\n  scraped_at,\\n  keywords,\\n  search_location,\\n  job_hash,\\n  created_at,\\n  updated_at,\\n  status,\\n  is_applied,\\n  is_saved,\\n  priority,\\n  notes\\n) VALUES (\\n  '{{ $json.id }}',\\n  '{{ $json.title }}',\\n  '{{ $json.company }}',\\n  '{{ $json.location }}',\\n  '{{ $json.summary }}',\\n  '{{ $json.link }}',\\n  '{{ $json.posted_date }}',\\n  '{{ $json.scraped_at }}',\\n  '{{ $json.keywords }}',\\n  '{{ $json.search_location }}',\\n  '{{ $json.job_hash }}',\\n  '{{ $json.created_at }}',\\n  '{{ $json.updated_at }}',\\n  '{{ $json.status }}',\\n  {{ $json.is_applied }},\\n  {{ $json.is_saved }},\\n  '{{ $json.priority }}',\\n  '{{ $json.notes }}'\\n)\\nON CONFLICT (job_hash) DO UPDATE SET\\n  updated_at = '{{ $json.updated_at }}',\\n  scraped_at = '{{ $json.scraped_at }}',\\n  link = '{{ $json.link }}'\\nRETURNING *;",
+        "options": {}
+      },
+      "id": "store-in-database",
+      "name": "Store in PostgreSQL",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        900,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-jobs-db",
+          "name": "LinkedIn Jobs Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\\n  \"success\": true,\\n  \"message\": \"Job stored successfully\",\\n  \"job_id\": \"{{ $json.id }}\",\\n  \"job_hash\": \"{{ $json.job_hash }}\",\\n  \"timestamp\": \"{{ DateTime.now().toISO() }}\"\\n}",
+        "options": {}
+      },
+      "id": "success-response",
+      "name": "Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1120,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\\n  \"success\": false,\\n  \"message\": \"Invalid job data provided\",\\n  \"error\": \"Missing required fields: title, company\",\\n  \"timestamp\": \"{{ DateTime.now().toISO() }}\"\\n}",
+        "responseCode": 400,
+        "options": {}
+      },
+      "id": "error-response",
+      "name": "Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        460,
+        480
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook - Job Storage": {
+      "main": [
+        [
+          {
+            "node": "Validate Job Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Job Data": {
+      "main": [
+        [
+          {
+            "node": "Enrich Job Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enrich Job Data": {
+      "main": [
+        [
+          {
+            "node": "Store in PostgreSQL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store in PostgreSQL": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1.0.0",
+  "meta": {
+    "templateCreatedBy": "n8n-templates",
+    "description": "Webhook endpoint for storing LinkedIn job data in PostgreSQL database with data validation and deduplication.",
+    "categories": ["Database", "Webhook", "Data Storage", "LinkedIn"]
+  },
+  "id": "linkedin-jobs-storage-webhook",
+  "tags": [
+    "webhook",
+    "database",
+    "postgresql",
+    "job-storage",
+    "linkedin"
+  ]
+}

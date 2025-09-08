@@ -1,0 +1,361 @@
+{
+  "name": "LinkedIn Jobs - Application Tracker",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "job-application-update",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "application-webhook",
+      "name": "Webhook - Job Application Update",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        300
+      ],
+      "webhookId": "job-application-update"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "validate-job-id",
+              "leftValue": "={{ $json.job_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            },
+            {
+              "id": "validate-status",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "applied,interview,rejected,offer,accepted",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "validate-update-data",
+      "name": "Validate Update Data",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=UPDATE linkedin_jobs SET\\n  status = '{{ $json.status }}',\\n  is_applied = {{ $json.status === 'applied' ? 'true' : 'false' }},\\n  application_date = {{ $json.status === 'applied' ? `'${DateTime.now().toISO()}'` : 'application_date' }},\\n  notes = COALESCE('{{ $json.notes }}', notes),\\n  priority = COALESCE('{{ $json.priority }}', priority),\\n  updated_at = '{{ DateTime.now().toISO() }}'\\nWHERE id = '{{ $json.job_id }}'\\nRETURNING *;",
+        "options": {}
+      },
+      "id": "update-job-status",
+      "name": "Update Job Status",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        680,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-jobs-db",
+          "name": "LinkedIn Jobs Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-status",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "applied",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-if-applied",
+      "name": "Check If Applied",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [
+        900,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-interview",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "interview",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-if-interview",
+      "name": "Check If Interview",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [
+        900,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C1234567890",
+          "mode": "name",
+          "cachedResultName": "job-applications"
+        },
+        "text": "=✅ **Application Submitted!**\\n\\n**{{ $json.title }}** at **{{ $json.company }}**\\n📍 {{ $json.location }}\\n\\n🔗 [View Job]({{ $json.link }})\\n\\n_Applied on: {{ DateTime.now().toFormat('MMM dd, yyyy HH:mm') }}_\\n_Status: {{ $json.status.toUpperCase() }}_",
+        "otherOptions": {
+          "mrkdwn": true
+        }
+      },
+      "id": "slack-applied-notification",
+      "name": "Slack - Application Submitted",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.1,
+      "position": [
+        1120,
+        140
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C1234567890",
+          "mode": "name",
+          "cachedResultName": "job-applications"
+        },
+        "text": "=🎉 **Interview Scheduled!**\\n\\n**{{ $json.title }}** at **{{ $json.company }}**\\n📍 {{ $json.location }}\\n\\n🔗 [View Job]({{ $json.link }})\\n\\n_Interview scheduled: {{ DateTime.now().toFormat('MMM dd, yyyy HH:mm') }}_\\n_Status: {{ $json.status.toUpperCase() }}_\\n{{ $json.notes ? `\\n📝 Notes: ${$json.notes}` : '' }}",
+        "otherOptions": {
+          "mrkdwn": true
+        }
+      },
+      "id": "slack-interview-notification",
+      "name": "Slack - Interview Scheduled",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.1,
+      "position": [
+        1120,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "event",
+        "operation": "create",
+        "calendarId": {
+          "__rl": true,
+          "value": "primary",
+          "mode": "list",
+          "cachedResultName": "Primary"
+        },
+        "start": "={{ DateTime.now().plus({days: 1}).startOf('hour').toISO() }}",
+        "end": "={{ DateTime.now().plus({days: 1}).startOf('hour').plus({hours: 1}).toISO() }}",
+        "summary": "=Interview: {{ $json.title }} at {{ $json.company }}",
+        "description": "=Job Interview\\n\\nPosition: {{ $json.title }}\\nCompany: {{ $json.company }}\\nLocation: {{ $json.location }}\\n\\nJob Details: {{ $json.link }}\\n\\nNotes: {{ $json.notes || 'No additional notes' }}",
+        "location": "={{ $json.location }}",
+        "attendees": "your-email@yourcompany.com",
+        "additionalFields": {
+          "sendUpdates": "all"
+        }
+      },
+      "id": "create-calendar-event",
+      "name": "Create Calendar Event",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.2,
+      "position": [
+        1120,
+        460
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "google-calendar-oauth",
+          "name": "Google Calendar OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\\n  \"success\": true,\\n  \"message\": \"Job application status updated successfully\",\\n  \"job_id\": \"{{ $json.job_id }}\",\\n  \"new_status\": \"{{ $json.status }}\",\\n  \"timestamp\": \"{{ DateTime.now().toISO() }}\"\\n}",
+        "options": {}
+      },
+      "id": "success-response",
+      "name": "Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1340,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\\n  \"success\": false,\\n  \"message\": \"Invalid application update data\",\\n  \"error\": \"Missing or invalid job_id or status\",\\n  \"timestamp\": \"{{ DateTime.now().toISO() }}\"\\n}",
+        "responseCode": 400,
+        "options": {}
+      },
+      "id": "error-response",
+      "name": "Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        460,
+        480
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook - Job Application Update": {
+      "main": [
+        [
+          {
+            "node": "Validate Update Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Update Data": {
+      "main": [
+        [
+          {
+            "node": "Update Job Status",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Job Status": {
+      "main": [
+        [
+          {
+            "node": "Check If Applied",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Check If Interview",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check If Applied": {
+      "main": [
+        [
+          {
+            "node": "Slack - Application Submitted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check If Interview": {
+      "main": [
+        [
+          {
+            "node": "Slack - Interview Scheduled",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Create Calendar Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1.0.0",
+  "meta": {
+    "templateCreatedBy": "n8n-templates",
+    "description": "Tracks job application status updates, sends notifications to Slack, and automatically creates calendar events for interviews.",
+    "categories": ["Job Tracking", "Applications", "Notifications", "Calendar"]
+  },
+  "id": "linkedin-jobs-application-tracker",
+  "tags": [
+    "job-tracking",
+    "applications",
+    "calendar",
+    "notifications",
+    "linkedin"
+  ]
+}

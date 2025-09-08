@@ -1,0 +1,365 @@
+{
+  "name": "LinkedIn Jobs Automation - Job Search & Alert",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 4
+            }
+          ]
+        }
+      },
+      "id": "scheduler-node",
+      "name": "Schedule Every 4 Hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        260,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "keywords",
+              "value": "={{ $node['Set Job Search Parameters'].json.keywords }}"
+            },
+            {
+              "name": "location",
+              "value": "={{ $node['Set Job Search Parameters'].json.location }}"
+            },
+            {
+              "name": "trk",
+              "value": "public_jobs_jobs-search-bar_search-submit"
+            },
+            {
+              "name": "position",
+              "value": "1"
+            },
+            {
+              "name": "pageNum",
+              "value": "0"
+            },
+            {
+              "name": "distance",
+              "value": "25"
+            },
+            {
+              "name": "f_TPR",
+              "value": "r86400"
+            },
+            {
+              "name": "f_JT",
+              "value": "F"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+            },
+            {
+              "name": "Accept",
+              "value": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "id": "linkedin-api-call",
+      "name": "LinkedIn Job Search API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "keywords",
+              "value": "Software Engineer"
+            },
+            {
+              "name": "location",
+              "value": "San Francisco, CA"
+            },
+            {
+              "name": "experience_level",
+              "value": "Mid-Senior level"
+            },
+            {
+              "name": "job_type",
+              "value": "Full-time"
+            },
+            {
+              "name": "remote",
+              "value": "true"
+            }
+          ]
+        }
+      },
+      "id": "job-search-params",
+      "name": "Set Job Search Parameters",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse LinkedIn job search results from HTML response\nconst html = $input.first().json.data;\nconst cheerio = require('cheerio');\nconst $ = cheerio.load(html);\n\nconst jobs = [];\n\n$('.result-card').each((index, element) => {\n  const $job = $(element);\n  \n  // Extract job details\n  const title = $job.find('.result-card__title a').text().trim();\n  const company = $job.find('.result-card__subtitle a').text().trim();\n  const location = $job.find('.job-result-card__location').text().trim();\n  const link = $job.find('.result-card__title a').attr('href');\n  const summary = $job.find('.job-result-card__snippet').text().trim();\n  const postedDate = $job.find('time').attr('datetime') || $job.find('.job-result-card__listdate').text().trim();\n  \n  // Extract job ID from link if available\n  const jobIdMatch = link ? link.match(/\\/jobs\\/view\\/(\\d+)/) : null;\n  const jobId = jobIdMatch ? jobIdMatch[1] : null;\n  \n  if (title && company) {\n    jobs.push({\n      id: jobId || `${title.replace(/\\s+/g, '-').toLowerCase()}-${company.replace(/\\s+/g, '-').toLowerCase()}`,\n      title: title,\n      company: company,\n      location: location,\n      summary: summary,\n      link: link ? (link.startsWith('http') ? link : `https://www.linkedin.com${link}`) : '',\n      posted_date: postedDate,\n      scraped_at: new Date().toISOString(),\n      keywords: $node['Set Job Search Parameters'].json.keywords,\n      search_location: $node['Set Job Search Parameters'].json.location\n    });\n  }\n});\n\n// Alternative parsing if the above doesn't work (LinkedIn changes their structure)\nif (jobs.length === 0) {\n  $('.job-search-card').each((index, element) => {\n    const $job = $(element);\n    \n    const title = $job.find('.base-search-card__title a').text().trim();\n    const company = $job.find('.base-search-card__subtitle a').text().trim();\n    const location = $job.find('.job-search-card__location').text().trim();\n    const link = $job.find('.base-search-card__title a').attr('href');\n    const summary = $job.find('.job-search-card__snippet').text().trim();\n    \n    const jobIdMatch = link ? link.match(/\\/jobs\\/view\\/(\\d+)/) : null;\n    const jobId = jobIdMatch ? jobIdMatch[1] : null;\n    \n    if (title && company) {\n      jobs.push({\n        id: jobId || `${title.replace(/\\s+/g, '-').toLowerCase()}-${company.replace(/\\s+/g, '-').toLowerCase()}`,\n        title: title,\n        company: company,\n        location: location,\n        summary: summary,\n        link: link ? (link.startsWith('http') ? link : `https://www.linkedin.com${link}`) : '',\n        posted_date: new Date().toISOString(),\n        scraped_at: new Date().toISOString(),\n        keywords: $node['Set Job Search Parameters'].json.keywords,\n        search_location: $node['Set Job Search Parameters'].json.location\n      });\n    }\n  });\n}\n\nconsole.log(`Found ${jobs.length} jobs`);\n\nreturn jobs.map(job => ({ json: job }));"
+      },
+      "id": "parse-jobs",
+      "name": "Parse Job Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition1",
+              "leftValue": "={{ $json.title }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "filter-valid-jobs",
+      "name": "Filter Valid Jobs",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=http://your-n8n-instance.com/webhook/job-storage",
+        "authentication": "headerAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "store-jobs",
+      "name": "Store Jobs in Database",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1340,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "new-job-check",
+              "leftValue": "={{ $json.posted_date }}",
+              "rightValue": "={{ DateTime.now().minus({hours: 4}).toISO() }}",
+              "operator": {
+                "type": "dateTime",
+                "operation": "after"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "filter-new-jobs",
+      "name": "Filter New Jobs Only",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C1234567890",
+          "mode": "name",
+          "cachedResultName": "job-alerts"
+        },
+        "text": "=🚀 **New Job Alert!**\\n\\n**{{ $json.title }}** at **{{ $json.company }}**\\n📍 {{ $json.location }}\\n\\n{{ $json.summary.substring(0, 200) }}...\\n\\n🔗 [View Job]({{ $json.link }})\\n\\n_Posted: {{ $json.posted_date }}_\\n_Keywords: {{ $json.keywords }}_",
+        "otherOptions": {
+          "mrkdwn": true
+        }
+      },
+      "id": "slack-notification",
+      "name": "Send Slack Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.1,
+      "position": [
+        1560,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "job-alerts@yourcompany.com",
+        "toEmail": "your-email@yourcompany.com",
+        "subject": "=New LinkedIn Job Alert: {{ $json.title }} at {{ $json.company }}",
+        "emailType": "html",
+        "message": "=<!DOCTYPE html>\\n<html>\\n<head>\\n    <meta charset=\\\"UTF-8\\\">\\n    <title>Job Alert</title>\\n    <style>\\n        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }\\n        .container { max-width: 600px; margin: 0 auto; padding: 20px; }\\n        .header { background: #0077b5; color: white; padding: 20px; text-align: center; }\\n        .job-card { border: 1px solid #ddd; margin: 10px 0; padding: 15px; border-radius: 5px; }\\n        .job-title { color: #0077b5; font-size: 18px; font-weight: bold; }\\n        .company { color: #666; font-size: 16px; margin: 5px 0; }\\n        .location { color: #888; font-size: 14px; }\\n        .summary { margin: 10px 0; }\\n        .button { background: #0077b5; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block; }\\n        .footer { margin-top: 20px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 12px; color: #666; }\\n    </style>\\n</head>\\n<body>\\n    <div class=\\\"container\\\">\\n        <div class=\\\"header\\\">\\n            <h1>🚀 New Job Alert!</h1>\\n        </div>\\n        \\n        <div class=\\\"job-card\\\">\\n            <div class=\\\"job-title\\\">{{ $json.title }}</div>\\n            <div class=\\\"company\\\">{{ $json.company }}</div>\\n            <div class=\\\"location\\\">📍 {{ $json.location }}</div>\\n            \\n            <div class=\\\"summary\\\">\\n                {{ $json.summary }}\\n            </div>\\n            \\n            <p>\\n                <a href=\\\"{{ $json.link }}\\\" class=\\\"button\\\">View Job Details</a>\\n            </p>\\n            \\n            <div class=\\\"footer\\\">\\n                <p><strong>Posted:</strong> {{ $json.posted_date }}</p>\\n                <p><strong>Search Keywords:</strong> {{ $json.keywords }}</p>\\n                <p><strong>Search Location:</strong> {{ $json.search_location }}</p>\\n                <p><em>This alert was generated by your LinkedIn Jobs Automation workflow.</em></p>\\n            </div>\\n        </div>\\n    </div>\\n</body>\\n</html>",
+        "options": {}
+      },
+      "id": "email-notification",
+      "name": "Send Email Notification",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1560,
+        480
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Every 4 Hours": {
+      "main": [
+        [
+          {
+            "node": "Set Job Search Parameters",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Job Search Parameters": {
+      "main": [
+        [
+          {
+            "node": "LinkedIn Job Search API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LinkedIn Job Search API": {
+      "main": [
+        [
+          {
+            "node": "Parse Job Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Job Results": {
+      "main": [
+        [
+          {
+            "node": "Filter Valid Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Valid Jobs": {
+      "main": [
+        [
+          {
+            "node": "Store Jobs in Database",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Filter New Jobs Only",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter New Jobs Only": {
+      "main": [
+        [
+          {
+            "node": "Send Slack Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Email Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1.0.0",
+  "meta": {
+    "templateCreatedBy": "n8n-templates",
+    "description": "Automated LinkedIn job search that runs every 4 hours, scrapes job postings, stores them in a database, and sends notifications for new opportunities via Slack and Email.",
+    "categories": ["Job Search", "Automation", "LinkedIn", "Notifications"]
+  },
+  "id": "linkedin-jobs-automation-main",
+  "tags": [
+    "linkedin",
+    "jobs",
+    "automation",
+    "scraping",
+    "notifications"
+  ]
+}
